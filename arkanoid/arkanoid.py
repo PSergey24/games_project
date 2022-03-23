@@ -2,6 +2,8 @@ import pygame
 import random
 from enum import Enum
 from collections import namedtuple
+import numpy as np
+
 
 pygame.init()
 font = pygame.font.SysFont('arial', 25)
@@ -10,9 +12,8 @@ font = pygame.font.SysFont('arial', 25)
 class Direction(Enum):
     RIGHT = 1
     LEFT = 2
-    UP = 3
-    DOWN = 4
-    SPACE = 5
+    SPACE = 3
+    NOTHING = 4
 
 
 Point = namedtuple('Point', 'x0 x1 y0 y1')
@@ -38,9 +39,9 @@ GOAL_BLOCK_SIZE = BLOCK_SIZE * 2
 SPEED = 40
 
 
-class ArkanoidGame:
+class ArkanoidGameAI:
 
-    def __init__(self, w=320, h=480):
+    def __init__(self, w=640, h=480):
         self.w = w
         self.h = h
         self.display = pygame.display.set_mode((self.w, self.h))
@@ -54,11 +55,11 @@ class ArkanoidGame:
         self.row_block_count = None
         self.get_edge_space_size()
 
-        self.racket_size = 100
+        self.racket_size = 60
         self.reset()
 
     def reset(self):
-        self.direction = None
+        self.direction = Direction.SPACE
         self.racket = Point((self.w / 2) - self.racket_size / 2, (self.w / 2) + self.racket_size / 2,
               self.h - 30 - BLOCK_SIZE, self.h - 30)
 
@@ -71,6 +72,7 @@ class ArkanoidGame:
         self._place_blocks()
 
         self.score = 0
+        self.reward = 0
         self.frame_iteration = 0
 
     def get_edge_space_size(self):
@@ -83,44 +85,64 @@ class ArkanoidGame:
             current_x_position = self.edge_space_size
             while current_x_position < self.w - GOAL_BLOCK_SIZE - SPACE_BETWEEN_BLOCKS:
                 self.blocks.append(PointBlocks(current_x_position, current_x_position + GOAL_BLOCK_SIZE,
-                                         current_y_position, current_y_position + BLOCK_SIZE, random.randint(1,2)))
+                                         current_y_position, current_y_position + BLOCK_SIZE, random.randint(1,1)))
                 current_x_position += GOAL_BLOCK_SIZE + SPACE_BETWEEN_BLOCKS
 
-        for i in range(5):
+        for i in range(8):
             x = random.randint(0, self.row_block_count - 1)
             y = random.randint(0, 5)
             item = PointBlocks(self.edge_space_size + x * (GOAL_BLOCK_SIZE + SPACE_BETWEEN_BLOCKS),
                          self.edge_space_size + x * (GOAL_BLOCK_SIZE + SPACE_BETWEEN_BLOCKS) + GOAL_BLOCK_SIZE,
-                         y * (BLOCK_SIZE + SPACE_BETWEEN_BLOCKS), y * (BLOCK_SIZE + SPACE_BETWEEN_BLOCKS) + BLOCK_SIZE, random.randint(1,2))
+                         y * (BLOCK_SIZE + SPACE_BETWEEN_BLOCKS), y * (BLOCK_SIZE + SPACE_BETWEEN_BLOCKS) + BLOCK_SIZE, random.randint(1,1))
             if item not in self.blocks:
                 self.blocks.append(item)
 
-    def play_step(self):
+    def play_step(self, action):
+        self.frame_iteration += 1
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 quit()
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_LEFT:
-                    self.direction = Direction.LEFT
-                elif event.key == pygame.K_RIGHT:
-                    self.direction = Direction.RIGHT
-                elif event.key == pygame.K_SPACE:
-                    self.direction = Direction.SPACE
 
-        self._move(self.direction)
+        self.reward = 0
+        self._move(action)
         game_over = self._ball_move(self.direction)
+
+        if game_over is True:
+            self.reward = -10
+
+        if len(self.blocks) == 0:
+            game_over = True
+            self.reward += 30
+
         self._update_ui()
-
-        self.direction = None
         self.clock.tick(SPEED)
-        return game_over, self.score
+        return self.reward, game_over, self.score
 
-    def _move(self, direction):
+    def _move(self, action):
+        # [nothing, start, right, left]
+
+        clock_wise = [Direction.NOTHING, Direction.SPACE, Direction.RIGHT, Direction.LEFT]
+        idx = clock_wise.index(self.direction)
+
+        if np.array_equal(action, [1, 0, 0, 0]):
+            new_dir = clock_wise[idx]  # no change
+        elif np.array_equal(action, [0, 0, 1, 0]):
+            next_idx = (idx + 1) % 4
+            new_dir = clock_wise[next_idx]
+        elif np.array_equal(action, [0, 0, 0, 1]):
+            next_idx = (idx + 2) % 4
+            new_dir = clock_wise[next_idx]
+        else:
+            next_idx = (idx - 1) % 4
+            new_dir = clock_wise[next_idx]
+
+        self.direction = new_dir
+
         difference = 0
-        if direction == Direction.RIGHT:
+        if self.direction == Direction.RIGHT:
             difference += BLOCK_SIZE
-        elif direction == Direction.LEFT:
+        elif self.direction == Direction.LEFT:
             difference -= BLOCK_SIZE
 
         if self.is_racket_edge(difference) is True:
@@ -145,8 +167,7 @@ class ArkanoidGame:
             next_position, game_over = self.is_ball_edge(next_position)
             next_position = self.is_other_subject(next_position)
             self.ball = next_position
-        if len(self.blocks) == 0:
-            game_over = True
+
         return game_over
 
     def get_next_position(self):
@@ -181,6 +202,7 @@ class ArkanoidGame:
             side = self.get_side(xDist, yDist)
             k = self.get_coefficient(next_step)
             self.change_speed(side, is_racket=True, coefficient=k)
+            self.reward += 10
 
         for i, item in enumerate(self.blocks):
             xDist, yDist = self.get_distance(next_step, item)
@@ -192,6 +214,7 @@ class ArkanoidGame:
                     self.blocks[i] = PointBlocks(item.x0, item.x1, item.y0, item.y1, item.live - 1)
 
                 self.score += 1
+                self.reward += 1
                 self.change_speed(side)
                 break
         return next_step
@@ -203,7 +226,8 @@ class ArkanoidGame:
         yDist = self.calculate_distance(ball.y0, brick.y1 - brick_height / 2) - brick_height / 2
         return xDist, yDist
 
-    def is_collision(self, xDist, yDist, ball):
+    @staticmethod
+    def is_collision(xDist, yDist, ball):
         return True if xDist < ball.r and yDist < ball.r else False
 
     @staticmethod
@@ -256,16 +280,12 @@ class ArkanoidGame:
                 self.ball_speed_x *= (-1) * abs((100 + r) / 100)
 
     def _update_ui(self):
+        border_size = 2
         self.display.fill(WHITE)
 
-        border_size = 2
-        pygame.draw.rect(self.display, DARK_BLUE, pygame.Rect(self.racket.x0, self.racket.y0,
-                                                         self.racket.x1 - self.racket.x0,
-                                                         self.racket.y1 - self.racket.y0))
+        pygame.draw.rect(self.display, DARK_BLUE, pygame.Rect(self.racket.x0, self.racket.y0, self.racket.x1 - self.racket.x0, self.racket.y1 - self.racket.y0))
         pygame.draw.rect(self.display, BLUE, pygame.Rect(self.racket.x0 + border_size, self.racket.y0 + border_size,
-                                                         self.racket.x1 - self.racket.x0 - border_size * 2,
-                                                         self.racket.y1 - self.racket.y0 - border_size * 2))
-
+                                                         self.racket.x1 - self.racket.x0 - border_size * 2, self.racket.y1 - self.racket.y0 - border_size * 2))
         pygame.draw.circle(self.display, DARK_RED, (round(self.ball.x0), round(self.ball.y0)), self.ball.r)
 
         for item in self.blocks:
@@ -280,19 +300,6 @@ class ArkanoidGame:
                                                               GOAL_BLOCK_SIZE - border_size * 2,
                                                               BLOCK_SIZE - border_size * 2))
 
-
         text = font.render("Score: " + str(self.score), True, BLACK)
         self.display.blit(text, [5, self.h - 30])
         pygame.display.flip()
-
-
-if __name__ == '__main__':
-    game = ArkanoidGame()
-
-    while True:
-        game_over, score = game.play_step()
-        if game_over is True:
-            break
-
-    print('Score: ', score)
-    pygame.quit()
