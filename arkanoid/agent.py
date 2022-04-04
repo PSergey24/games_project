@@ -18,34 +18,41 @@ class Agent:
         self.epsilon = 0
         self.gamma = 0.9
         self.memory = deque(maxlen=MAX_MEMORY)
-        self.model = Linear_QNet(5, 256, 4)
+        self.model = Linear_QNet(1, 256, 2)
         self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)
 
     def get_state(self, game):
         racket = game.racket
         ball = game.ball
         ball_speed_y = game.ball_speed_y
+        ball_speed_x = game.ball_speed_x
 
         dir_l = game.direction == Direction.LEFT
         dir_r = game.direction == Direction.RIGHT
 
         state = [
-            # not danger
-            ball_speed_y < 0,
-            (ball_speed_y > 0) and (racket.x1 >= ball.x0 >= racket.x0),
-
-            # danger
-            (ball_speed_y > 0) and not (racket.x1 >= ball.x0 >= racket.x0),
-
-            # Move direction
-            dir_l,
-            dir_r
+            racket.x1 >= ball.x0 >= racket.x0
         ]
-        # if ball_speed_y > 0 and state[2] is True:
-        #     print(1)
-        # if ball_speed_y > 0 and state[2] is False:
-        #     print(1)
 
+        # state = [
+        #     # not danger
+        #     ball_speed_y < 0,
+        #     (ball_speed_y > 0) and (racket.x1 >= ball.x0 >= racket.x0),
+        #
+        #     # danger
+        #     (ball_speed_y > 0) and not (racket.x1 >= ball.x0 >= racket.x0),
+        #
+        #     (ball.x0 > racket.x1),
+        #     (racket.x0 > ball.x0),
+        #
+        #     ball_speed_x > 0,
+        #     ball_speed_x < 0,
+        #
+        #     # Move direction
+        #     dir_l,
+        #     dir_r,
+        #     game.ball_motion
+        # ]
         return np.array(state, dtype=int)
 
     def remember(self, state, action, reward, next_state, done):
@@ -65,10 +72,10 @@ class Agent:
 
     def get_action(self, state):
         # random moves: tradeoff exploration / exploitation
-        self.epsilon = 80 - self.n_games
-        final_move = [0, 0, 0, 0]
+        self.epsilon = 70 - self.n_games
+        final_move = [0, 0]
         if random.randint(0, 200) < self.epsilon:
-            move = random.randint(0, 2)
+            move = random.randint(0, 1)
             final_move[move] = 1
         else:
             state0 = torch.tensor(state, dtype=torch.float)

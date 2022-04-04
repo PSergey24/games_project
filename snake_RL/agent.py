@@ -18,7 +18,7 @@ class Agent:
         self.epsilon = 0
         self.gamma = 0.9
         self.memory = deque(maxlen=MAX_MEMORY)
-        self.model = Linear_QNet(11, 256, 3)
+        self.model = Linear_QNet(13, 256, 3)
         self.trainer = QTrainer(self.model, lr=LR, gamma=self.gamma)
 
     def get_state(self, game):
@@ -61,8 +61,10 @@ class Agent:
             # Food location
             game.food.x < game.head.x,  # food left
             game.food.x > game.head.x,  # food right
+            game.food.x == game.head.x,
             game.food.y < game.head.y,  # food up
-            game.food.y > game.head.y  # food down
+            game.food.y > game.head.y,  # food down
+            game.food.y == game.head.y
         ]
         return np.array(state, dtype=int)
 

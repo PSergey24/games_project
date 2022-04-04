@@ -133,6 +133,16 @@ class ArkanoidGame:
         x0, x1, y0, y1 = self.racket
         return True if self.w >= x1 + difference and x0 + difference >= 0 else False
 
+    def is_racket_in_ball(self, difference):
+        x0, x1, y0, y1 = self.racket
+        right_ball = self.ball.x0 + self.ball.r
+        left_ball = self.ball.x0 - self.ball.r
+
+        if (x1 + difference > left_ball or x0 + difference < right_ball) and y0 < self.ball.y0 < y1:
+            return False
+        else:
+            return True
+
     def _ball_move(self, direction):
         if direction == Direction.SPACE and self.ball_motion is False:
             self.ball_motion = True

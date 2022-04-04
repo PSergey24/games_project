@@ -94,6 +94,13 @@ class SnakeGameAI:
             return True
         return False
 
+    def is_head_around_by_tail(self):
+        if abs(self.head.x - self.snake[len(self.snake) - 1].x) // BLOCK_SIZE <= 2 \
+                and abs(self.head.y - self.snake[len(self.snake) - 1].y) // BLOCK_SIZE <= 2:
+            return True
+        else:
+            return False
+
     def _update_ui(self):
         self.display.fill(WHITE)
 
